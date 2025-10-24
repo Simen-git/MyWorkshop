@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Halden Weather</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 760px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: #ddd;
+      background: linear-gradient(135deg, #0f2027, #2a4954, #609cb6, #2a4954, #0f2027);
+    }
+
+    h1 {
+      text-align: center;
+      color: #f0f0f0;
+      margin-bottom: 24px;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+
+    .card {
+      background: linear-gradient(145deg, #1c1c1c, #2a2a2a);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7),
+                  0 0 10px rgba(255, 255, 255, 0.05);
+      transition: transform 0.2s, box-shadow 0.3s;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8),
+                  0 0 15px rgba(255, 255, 255, 0.1);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .temp {
+      font-size: 3rem;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 0 6px rgba(150, 217, 244, 0.7);
+    }
+
+    .muted {
+      color: #bbb;
+      font-size: 0.9rem;
+    }
+
+    .day {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-top: 1px solid #444;
+      transition: background 0.3s;
+      border-radius: 10px;
+    }
+
+    .day:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .day:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .day div {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .error {
+      color: #ff5252;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .precip {
+      color: #6ec6ff;
+      font-weight: 500;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Weather — Halden</h1>
+
+  <div id="app" class="card">
+    <div id="loading" class="muted">Loading forecast for Halden…</div>
+  </div>
+
+  <script>
+    const lat = 59.1269;
+    const lon = 11.3876;
+    const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+
+    const app = document.getElementById('app');
+    const loading = document.getElementById('loading');
+
+    function render(data) {
+      loading?.remove();
+
+      const timeseries = data.properties.timeseries;
+      const current = timeseries[0];
+      const details = current.data.instant.details;
+      const temp = details.air_temperature;
+      const wind = details.wind_speed;
+      const weatherSymbol = current.data.next_1_hours?.summary.symbol_code || 'unknown';
+      const precip = current.data.next_1_hours?.details?.precipitation_amount ?? 0;
+
+      const curDiv = document.createElement('div');
+      curDiv.className = 'card';
+      curDiv.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="temp">${Math.round(temp)}°C</div>
+            <div class="muted">Current — ${current.time}</div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div class="muted">${weatherSymbol.replace(/_/g, ' ')}</div>
+            <div class="muted">Wind ${wind.toFixed(1)} m/s</div>
+            <div class="precip">${precip > 0 ? precip + ' mm rain' : 'No precipitation'}</div>
+          </div>
+        </div>
+      `;
+      app.appendChild(curDiv);
+
+      const days = {};
+      for (const item of timeseries) {
+        const d = item.time.split('T')[0];
+        if (!days[d]) days[d] = [];
+        days[d].push(item);
+      }
+
+      const list = document.createElement('div');
+      const daysCard = document.createElement('div');
+      daysCard.className = 'card';
+
+      for (const [date, entries] of Object.entries(days).slice(0, 7)) {
+        const temps = entries.map(e => e.data.instant.details.air_temperature);
+        const min = Math.min(...temps);
+        const max = Math.max(...temps);
+
+        const symbol = entries.find(e => e.data.next_6_hours)?.data.next_6_hours.summary.symbol_code
+          || entries[0].data.next_1_hours?.summary.symbol_code
+          || 'unknown';
+
+        const avgPrecip = entries
+          .map(e => e.data.next_1_hours?.details?.precipitation_amount || 0)
+          .reduce((a, b) => a + b, 0)
+          .toFixed(1);
+
+        const weekday = new Date(date).toLocaleDateString(undefined, {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short'
+        });
+
+        const day = document.createElement('div');
+        day.className = 'day';
+        day.innerHTML = `
+          <div style="min-width:130px">
+            <div style="font-weight:600">${weekday}</div>
+            <div class="muted">${symbol.replace(/_/g, ' ')}</div>
+          </div>
+          <div style="text-align:right;min-width:120px">
+            <div><strong style="color:#fff">${Math.round(max)}° / ${Math.round(min)}°C</strong></div>
+            <div class="precip">${avgPrecip > 0 ? avgPrecip + ' mm' : 'No precipitation'}</div>
+          </div>
+        `;
+        list.appendChild(day);
+      }
+
+      daysCard.appendChild(list);
+      app.appendChild(daysCard);
+    }
+
+    function showError(err) {
+      loading?.remove();
+      const e = document.createElement('div');
+      e.className = 'card error';
+      e.textContent = 'Could not load weather. ' + (err.message || err);
+      app.appendChild(e);
+      console.error(err);
+    }
+
+    fetch(url, {
+      headers: { 'User-Agent': 'HaldenWeather/1.0 (example@example.com)' }
+    })
+      .then(resp => {
+        if (!resp.ok) throw new Error('Network response not ok: ' + resp.status);
+        return resp.json();
+      })
+      .then(render)
+      .catch(showError);
+  </script>
+</body>
+</html>
